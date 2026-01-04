@@ -3,7 +3,7 @@ const cors = require('cors');
 const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 5000;
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 // middleware
 app.use(express.json());
@@ -28,23 +28,23 @@ async function run() {
     const db = client.db('digital_platform_db');
     const parcelsCollection = db.collection('parcels');
 
-    app.get('/parcels', async(req, res) => {
+    app.get('/parcels', async (req, res) => {
       const query = {}
-      const {email} = req.query;
-      if(email){
+      const { email } = req.query;
+      if (email) {
         query.SenderEmail = email;
       }
-
-      const cursor = parcelsCollection.find(query);
+      const Options = { sort: { createAt: -1 } }
+      const cursor = parcelsCollection.find(query, Options);
       const result = await cursor.toArray();
       res.send(result)
     })
 
-    app.post ('/parcels', async(req, res) => {
-      const parcel = req.body;
-      parcel.createAt = new Date()
-      const result = await parcelsCollection.insertOne(parcel);
-      res.send(result)
+    app.get("/parcels/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await parcelsCollection.findOne(query);
+      return res.send(result);
     })
 
     // Send a ping to confirm a successful connection
@@ -58,9 +58,9 @@ async function run() {
 run().catch(console.dir);
 
 app.get('/', (req, res) => {
-    res.send("hello world")
+  res.send("hello world")
 })
 
 app.listen(port, () => {
-    console.log(`Example app listening on port ${port}`)
+  console.log(`Example app listening on port ${port}`)
 })
