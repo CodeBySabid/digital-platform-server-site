@@ -3,6 +3,15 @@ const cors = require('cors');
 const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 5000;
+const crypto = require('crypto');
+
+function generateTrackingId() {
+  const prefix = 'PRCL';
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const random = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `${prefix}-${date}-${random}`;
+}
+
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 // middleware
@@ -24,11 +33,12 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
+
     await client.connect();
 
     const db = client.db('digital_platform_db');
     const parcelsCollection = db.collection('parcels');
+    const paymentCollection = db.collection('payments');
 
     app.get('/parcels', async (req, res) => {
       const query = {}
@@ -75,6 +85,7 @@ async function run() {
         mode: 'payment',
         metadata: {
           parcelId: paymentInfo.parcelId,
+          parcelName: paymentInfo.parcelName,
         },
         customer_email: paymentInfo.senderEmail,
         success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
@@ -91,7 +102,6 @@ async function run() {
       const session = await stripe.checkout.sessions.create({
         line_items: [
           {
-            // Provide the exact Price ID (for example, price_1234) of the product you want to sell
             price_data: {
               currency: 'usd',
               unit_amount: amount,
@@ -121,37 +131,51 @@ async function run() {
       res.send(result)
     })
 
-    // app.get("/payment-success", async(req, res) => {
-    //   const sessionId = req.query.session_id;
-    //   console.log("session id", sessionId)
-    //   res.send({success: true})
-    // })
+    app.patch("/payment-success", async (req, res) => {
+      const sessionId = req.query.session_id;
 
 
-
-    app.post("/payment-success", async (req, res) => {
-      const { sessionId } = req.body;
-
-      // Stripe session verify (optional but recommended)
       const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const trackingId = generateTrackingId()
+      const transactionId = session.payment_intent;
+      const query = {transactionId: transactionId}
+      const paymentExist = await paymentCollection.findOne(query)
+      console.log(paymentExist)
+      if(paymentExist) {
+        return res.send({message: "already exists", transactionId, trackingId: paymentExist.trackingId})
+      }
 
-      const parcelId = session.metadata.parcelId;
-
-      await parcelsCollection.updateOne(
-        { _id: new ObjectId(parcelId) },
-        {
+      // console.log(session)
+      if (session.payment_status === 'paid') {
+        const id = session.metadata.parcelId;
+        const query = { _id: new ObjectId(id) }
+        const update = {
           $set: {
-            paymentStatus: "paid",
-            transactionId: session.payment_intent
+            paymentStatus: 'paid',
+            trackingId: trackingId,
           }
         }
-      );
+        const result = await parcelsCollection.updateOne(query, update);
+        const payment = {
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          customerEmail: session.customer_email,
+          parcelId: session.metadata.parcelId,
+          parcelName: session.metadata.parcelName,
+          transactionId: session.payment_intent,
+          paymentStatus: session.payment_status,
+          paidAt: new Date(),
+          trackingId: trackingId,
+        };
 
-      res.send({ success: true });
+        if(session.payment_status ===  'paid'){
+          const resultPayment = await paymentCollection.insertOne(payment);
+          return res.send({ transactionId:session.payment_intent, success: true, trackingId: trackingId, modifyParcel: result, paymentInfo: resultPayment})
+        }
+
+      }
+      res.send({ success: false });
     });
-
-
-
 
 
     // Send a ping to confirm a successful connection
