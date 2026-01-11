@@ -93,6 +93,13 @@ async function run() {
       res.send(result);
     })
 
+    app.delete ('/payments/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await paymentCollection.deleteOne(query);
+      res.send(result);
+    })
+
     app.post('/payment-checkout-session', async (req, res) => {
       const paymentInfo = req.body;
       const amount = parseInt(paymentInfo.cost) * 100;
@@ -160,8 +167,6 @@ async function run() {
 
     app.patch("/payment-success", async (req, res) => {
       const sessionId = req.query.session_id;
-
-
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       const trackingId = generateTrackingId()
       const transactionId = session.payment_intent;
@@ -211,7 +216,9 @@ async function run() {
 
       if (email) {
         query.customerEmail = email;
-
+        if(email !== req.decoded_email){
+          return res.status(403).send({message: 'forbidden access'})
+        }
       }
       const cursor = paymentCollection.find(query);
       const result = await cursor.toArray();
