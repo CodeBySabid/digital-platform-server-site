@@ -64,8 +64,17 @@ async function run() {
     await client.connect();
 
     const db = client.db('digital_platform_db');
+    const userCollection = db.collection('users');
     const parcelsCollection = db.collection('parcels');
     const paymentCollection = db.collection('payments');
+
+    app.post('/users', async(req, res) => {
+      const user = req.body;
+      user.role = "user";
+      user.createdAt = new Date();
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    })
 
     app.get('/parcels', async (req, res) => {
       const query = {}
@@ -73,8 +82,8 @@ async function run() {
       if (email) {
         query.SenderEmail = email;
       }
-      const Options = { sort: { createAt: -1 } }
-      const cursor = parcelsCollection.find(query, Options);
+      // const Options = { sort: { createAt: -1 } }
+      const cursor = parcelsCollection.find(query).sort({createAt: -1});
       const result = await cursor.toArray();
       res.send(result)
     })
@@ -160,7 +169,7 @@ async function run() {
 
     app.post('/parcels', async (req, res) => {
       const parcel = req.body;
-      parcel.createAt = new Date()
+      parcel.createAt = new Date();
       const result = await parcelsCollection.insertOne(parcel);
       res.send(result)
     })
@@ -220,7 +229,7 @@ async function run() {
           return res.status(403).send({message: 'forbidden access'})
         }
       }
-      const cursor = paymentCollection.find(query);
+      const cursor = paymentCollection.find(query).sort({paidAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     })
