@@ -67,6 +67,7 @@ async function run() {
     const userCollection = db.collection('users');
     const parcelsCollection = db.collection('parcels');
     const paymentCollection = db.collection('payments');
+    const ridersCollection = db.collection('riders');
 
     app.post('/users', async(req, res) => {
       const user = req.body;
@@ -247,6 +248,14 @@ async function run() {
       res.send(result);
     })
 
+    app.post('/riders', async(req, res) => {
+      const rider = req.body;
+      rider.status = 'pending';
+      rider.createAt = new Date();
+
+      const result = await ridersCollection.insertOne(rider);
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
