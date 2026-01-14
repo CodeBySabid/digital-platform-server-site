@@ -72,6 +72,12 @@ async function run() {
       const user = req.body;
       user.role = "user";
       user.createdAt = new Date();
+      const email = user.email;
+      const userExists = await userCollection.findOne({email});
+      if(userExists) {
+        return res.send({message: 'user exists'})
+      }
+
       const result = await userCollection.insertOne(user);
       res.send(result);
     })
@@ -86,6 +92,13 @@ async function run() {
       const cursor = parcelsCollection.find(query).sort({createAt: -1});
       const result = await cursor.toArray();
       res.send(result)
+    })
+
+    app.delete('/parcels', async(req, res) => {
+      const id = req.body;
+      const query = {_id: new ObjectId(id)};
+      const result = await parcelsCollection.deleteOne(query);
+      res.send(result);
     })
 
     app.get("/parcels/:id", async (req, res) => {
