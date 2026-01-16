@@ -29,20 +29,19 @@ app.use(cors());
 
 const verifyFbToken = async (req, res, next) => {
   const token = req.headers?.authorization
-  console.log("veruiy gjakhg", req.headers.authorization)
   if (!token) {
     return res.status(401).send({ message: 'unauthorized access' })
   }
   try {
     const idToken = token.split(' ')[1];
     const decoded = await admin.auth().verifyIdToken(idToken)
-    console.log(decoded)
     req.decoded_email = decoded.email;
     next();
   }
   catch (err) {
     return res.status(401).send({ message: 'unauthorized access' })
   }
+  if (res.headersSent) return;
 }
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.lqmwh22.mongodb.net/?appName=Cluster0`;
@@ -69,13 +68,41 @@ async function run() {
     const paymentCollection = db.collection('payments');
     const ridersCollection = db.collection('riders');
 
+    const verifyFbAdmin = async(req, res, next) => {
+      const email = req.decoded_email;
+      const query = {email};
+      const user = await userCollection.findOne(query);
+      if(!user || user.role !== "Admin") {
+        return res.status(403).send({message : 'forbidden access'})
+      }
+      next();
+    }
+
     app.get('/users', verifyFbToken, async(req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
       res.send(result);
     })
 
-    app.patch('/users/:id', async(req, res) => {
+    app.get('/users/:id', async(req, res) => {
+
+    })
+
+    app.get('/users/:email/role', verifyFbToken, async(req, res) => {
+      const email = req.params.email;
+      const query = {email}
+      const user = await userCollection.findOne(query);
+      res.send({role: user?.role || 'user'})
+    })
+
+    app.delete('/users/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await userCollection.deleteOne(query);
+      res.send(result)
+    })
+
+    app.patch('/users/:id/role', verifyFbToken, verifyFbAdmin, async(req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
       const query = {_id: new ObjectId(id)};
@@ -196,7 +223,6 @@ async function run() {
         success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
       });
-      console.log(session);
       res.send({ url: session.url })
     });
 
@@ -214,7 +240,6 @@ async function run() {
       const transactionId = session.payment_intent;
       const query = { transactionId: transactionId }
       const paymentExist = await paymentCollection.findOne(query)
-      console.log(paymentExist)
       if (paymentExist) {
         return res.send({ message: "already exists", transactionId, trackingId: paymentExist.trackingId })
       }
@@ -286,7 +311,7 @@ async function run() {
       res.send(result);
     })
 
-    app.patch('/riders/:id', verifyFbToken, async(req, res) => {
+    app.patch('/riders/:id/role', verifyFbToken, verifyFbAdmin, async(req, res) => {
       const status = req.body.status;
       const id = req.params.id;
       const query = {_id: new ObjectId(id)};
