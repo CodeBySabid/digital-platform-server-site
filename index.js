@@ -88,13 +88,16 @@ async function run() {
           {email: {$regex : searchText, $options: 'i'}}
         ]
       }
-      const cursor = userCollection.find(query).sort({createdAt: -1}).limit(5);
+      const cursor = userCollection.find(query).sort({createdAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     })
 
-    app.get('/users/:id', async(req, res) => {
-
+    app.get('/users/:email', verifyFbToken, async(req, res) => {
+      const email = req.decoded_email;
+      const query = {email};
+      const user = await userCollection.findOne(query);
+      res.send(user)
     })
 
     app.get('/users/:email/role', verifyFbToken, async(req, res) => {
@@ -140,12 +143,15 @@ async function run() {
 
     app.get('/parcels', async (req, res) => {
       const query = {}
-      const { email } = req.query;
+      const { email, deliveryStatus } = req.query;
       if (email) {
         query.SenderEmail = email;
       }
-      // const Options = { sort: { createAt: -1 } }
-      const cursor = parcelsCollection.find(query).sort({createAt: -1});
+      if(deliveryStatus) {
+        query.deliveryStatus = deliveryStatus;
+      }
+      const Options = { sort: { createAt: -1 } }
+      const cursor = parcelsCollection.find(query, Options);
       const result = await cursor.toArray();
       res.send(result)
     })
@@ -260,6 +266,7 @@ async function run() {
         const update = {
           $set: {
             paymentStatus: 'paid',
+            deliveryStatus: 'pending-pickup',
             trackingId: trackingId,
           }
         }
